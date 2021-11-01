@@ -24,6 +24,11 @@ namespace Ytc
 	public:
 		static constexpr uint32_t MaxSize = uint32_t(-1);
 		static constexpr uint32_t InvalidIndex = MaxSize;
+		/// <summary>
+		/// Calculate the zero-terminated string length
+		/// </summary>
+		/// <param name="buffer"></param>
+		/// <returns></returns>
 		static uint32_t CountChar(const T* buffer) noexcept
 		{
 			if (!buffer) return 0;
@@ -31,7 +36,12 @@ namespace Ytc
 			while (*buffer++) ++result;
 			return result;
 		}
-
+		/// <summary>
+		/// Compare two specified string objects and returns an integer that indicates their relative position in the sort order.
+		/// </summary>
+		/// <param name="s1"></param>
+		/// <param name="s2"></param>
+		/// <returns></returns>
 		static int Compare(const String<T>& s1, const String<T>& s2) noexcept
 		{
 			const T* buffer1 = s1.Buffer();
@@ -184,7 +194,10 @@ namespace Ytc
 		{
 			return Length() < MaxStaticBufferSize ? storage_.static_buffer : storage_.variable_buffer;
 		}
-
+		/// <summary>
+		/// Return the count of characters.
+		/// </summary>
+		/// <returns></returns>
 		uint32_t Length() const noexcept
 		{
 			return length_;
@@ -194,7 +207,12 @@ namespace Ytc
 		{
 			return Length() == 0;
 		}
-
+		/// <summary>
+		/// Retrieves a substring from this instance.
+		/// </summary>
+		/// <param name="start">The zero-absed starting character position of a substring in this instance.</param>
+		/// <param name="length">The number of characters in the substring.</param>
+		/// <returns></returns>
 		String SubString(uint32_t start, uint32_t length = MaxSize) const
 		{
 			if (start < length_)
@@ -205,11 +223,11 @@ namespace Ytc
 			throw Exception(L"The argument<start> is out of range!");
 		}
 		/// <summary>
-		/// Reports the zero-based index of the first occurrence of specified character.
+		/// Reports the zero-based index of the first occurrence of a specified character.
 		/// </summary>
-		/// <param name="c"></param>
+		/// <param name="c">The specified character.</param>
 		/// <returns>index of the character</returns>
-		uint32_t IndexOf(T c) const
+		uint32_t IndexOf(T c) const noexcept
 		{
 			const T* buffer = Buffer();
 			for (uint32_t i = 0; i < length_; ++i)
@@ -218,22 +236,22 @@ namespace Ytc
 			}
 			return InvalidIndex;
 		}
-
-		uint32_t IndexOf(const String<T>& _string) const
+		/// <summary>
+		/// Reports the zero-based index of the first occurrence of a specified string.
+		/// </summary>
+		/// <param name="value">The string to seek.</param>
+		/// <returns>index of the string</returns>
+		uint32_t IndexOf(const String<T>& value) const noexcept
 		{
-			if (_string.IsEmpty()) return 0;
-			uint32_t length = _string.length_;
-			const T* _buffer = _string.Buffer();
+			if (value.IsEmpty()) return 0;
+			uint32_t length = value.length_;
+			const T* _buffer = value.Buffer();
 			const T* my_buffer = Buffer();
 			for (uint32_t start = 0; length <= length_ - start; ++start)
 			{
 				uint32_t i = start;
-				for (uint32_t j = 0; j < length; ++j)
+				for (uint32_t j = 0; j < length && my_buffer[i] == _buffer[j]; ++j)
 				{
-					if (my_buffer[i] != _buffer[j])
-					{
-						break;
-					}
 					++i;
 				}
 				if ((i - start) == length)
@@ -242,6 +260,62 @@ namespace Ytc
 				}
 			}
 			return InvalidIndex;
+		}
+		/// <summary>
+		/// Report the zero-based index position of the last occurrence of a specified character within this instance.
+		/// </summary>
+		/// <param name="value">The specified character</param>
+		/// <returns>the index of value</returns>
+		uint32_t LastIndexOf(T value) const noexcept
+		{
+			const T* buffer = Buffer();
+			for (uint32_t i = length_ - 1; i != InvalidIndex; --i)
+			{
+				if (buffer[i] == value) return i;
+			}
+			return InvalidIndex;
+		}
+        /// <summary>
+        /// Report the zero-based index position of the last occurrence of a specified string within this instance.
+        /// </summary>
+        /// <param name="value">The specified string</param>
+        /// <returns>the index of value</returns>
+		uint32_t LastIndexOf(const String<T>& value) const noexcept
+		{
+			if (IsEmpty()) return InvalidIndex;
+			if (value.IsEmpty()) return length_ - 1;
+			uint32_t length = value.length_;
+			const T* buffer = value.Buffer();
+			const T* my_buffer = Buffer();
+			for (uint32_t start = length_ - 1; length <= (start + 1); --start)
+			{
+				uint32_t i = start;
+				for (uint32_t j = length - 1; j != InvalidIndex && my_buffer[i] == buffer[j]; --j)
+				{
+					--i;
+				}
+				if ((start - i) == length) return i + 1;
+			}
+			return InvalidIndex;
+		}
+
+		/// <summary>
+		/// Returns a value indicating whether a specified character occurs within this string.
+		/// </summary>
+		/// <param name="value">The specified character</param>
+		/// <returns> true if the value occurs; otherwise, false</returns>
+		bool Contains(T value) const noexcept
+		{
+			return IndexOf(value) != InvalidIndex;
+		}
+        /// <summary>
+        /// Returns a value indicating whether a specified string occurs within this string.
+        /// </summary>
+        /// <param name="value">The specified string</param>
+        /// <returns> true if the value occurs; otherwise, false</returns>
+		bool Contains(const String<T>& value) const noexcept
+		{
+			return IndexOf(value) != InvalidIndex;
 		}
 
 		bool operator==(const String<T>& _string) const noexcept

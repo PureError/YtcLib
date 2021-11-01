@@ -100,6 +100,7 @@ void TestYtcString()
 		std::wcout << VAR(exepected_result) << VAR(actual_result) << VAR(pass) << std::endl;
 	}
 
+	std::cout << "\n>>>>>>>>>>>>>>>>>>>>Test IndexOf()\n";
 }
 
 int main()

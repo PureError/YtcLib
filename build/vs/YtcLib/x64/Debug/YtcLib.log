@@ -1,0 +1,4 @@
+﻿  Test.cpp
+E:\codes\YtcLib\test\Test.cpp(47,47): warning C4267: “初始化”: 从“size_t”转换到“uint32_t”，可能丢失数据
+E:\codes\YtcLib\test\Test.cpp(90,9): warning C4838: 从“int”转换到“uint32_t”需要收缩转换
+  YtcLib.vcxproj -> E:\codes\YtcLib\build\vs\YtcLib\x64\Debug\YtcLib.exe
