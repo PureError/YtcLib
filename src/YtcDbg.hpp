@@ -28,25 +28,25 @@ void __cdecl operator delete[](void* ptr);
 class MemLeakChecker
 {
 public:
-	MemLeakChecker(const MemLeakChecker&) = delete;
-	MemLeakChecker& operator=(const MemLeakChecker&) = delete;
+    MemLeakChecker(const MemLeakChecker&) = delete;
+    MemLeakChecker& operator=(const MemLeakChecker&) = delete;
 
-	MemLeakChecker()
-	{
-		_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
-		_CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDOUT);
-		_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-		_CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDOUT);
-		_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-		_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDOUT);
-		SET_CRT_DEBUG_FIELD(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
-	}
+    MemLeakChecker()
+    {
+        _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDOUT);
+        _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDOUT);
+        _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDOUT);
+        SET_CRT_DEBUG_FIELD(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+    }
 
-	~MemLeakChecker()
-	{
-		_CrtDumpMemoryLeaks();
-		CLEAR_CRT_DEBUG_FIELD(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
-	}
+    ~MemLeakChecker()
+    {
+        _CrtDumpMemoryLeaks();
+        CLEAR_CRT_DEBUG_FIELD(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+    }
 
 };
 
