@@ -1,2 +1,0 @@
-E:\codes\YtcLib\build\vs\YtcLib\x64\Debug\YtcLib.exe
-E:\codes\YtcLib\build\vs\YtcLib\x64\Debug\YtcLib.pdb

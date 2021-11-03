@@ -164,7 +164,7 @@ namespace Ytc
             }
             return *this;
         }
-        String& operator=(String<T>&& _string)
+        String& operator=(String<T>&& _string) noexcept
         {
             if (this != &_string)
             {
@@ -213,7 +213,7 @@ namespace Ytc
         /// <param name="start">The zero-absed starting character position of a substring in this instance.</param>
         /// <param name="length">The number of characters in the substring.</param>
         /// <returns></returns>
-        String SubString(uint32_t start, uint32_t length = MaxSize) const
+        String<T> SubString(uint32_t start, uint32_t length = MaxSize) const
         {
             if (start < length_)
             {
@@ -317,10 +317,216 @@ namespace Ytc
         {
             return IndexOf(value) != InvalidIndex;
         }
+        /// <summary>
+        /// Returns a new string in which a specified number of characters in the current instance beginning at a specified position have been deleted.
+        /// </summary>
+        /// <param name="start">specified zero-based position</param>
+        /// <param name="count">number of characters</param>
+        /// <returns>a new string instance</returns>
+        String<T> Remove(uint32_t start, uint32_t count) const
+        {
+            if (start < length_ && (start + count) <= length_)
+            {
+                auto* myBuffer = Buffer();
+                uint32_t newLength = length_ - count;
+                if (start == 0)
+                {
+                    return String(myBuffer + count, newLength);
+                }
+                else
+                {
+                    String<T> newString;
+                    newString.length_ = newLength;
+                    uint32_t rightStart = start + count;
+                    if (newString.length_ < MaxStaticBufferSize)
+                    {
+                        memcpy(newString.storage_.static_buffer, myBuffer, sizeof(T) * (start - 0));
+                        memcpy(newString.storage_.static_buffer + start, myBuffer + rightStart, sizeof(T) * (length_ - rightStart));
+                    }
+                    else
+                    {
+                        newString.storage_.buffer_size = newString.length_ + 1;
+                        newString.storage_.variable_buffer = new T[newString.storage_.buffer_size];
+                        memcpy(newString.storage_.variable_buffer, myBuffer, sizeof(T) * (start - 0));
+                        memcpy(newString.storage_.variable_buffer + start, myBuffer + rightStart, sizeof(T) * (length_ + 1 - rightStart));
+                    }
+                    return newString;
+                }
+            }
+            else
+            {
+                throw Exception(L"The argument is out of range for this instance!");
+            }
+        }
+
+        /// <summary>
+        /// Returns a copy of this string converted to uppercase.
+        /// </summary>
+        /// <returns>a new string instance</returns>
+        String<T> ToUpper() const
+        {
+            String<T> newString(*this);
+            T* buffer = const_cast<T*>(newString.Buffer());
+            for (uint32_t i = 0; i < length_; ++i)
+            {
+                T c = buffer[i];
+                if (c >= 'a' && c <= 'z')
+                {
+                    buffer[i] = c - DistanceOfUpperLower;
+                }
+            }
+            return newString;
+        }
+        /// <summary>
+        /// Returns a copy of this string converted to lowercase.
+        /// </summary>
+        /// <returns>a new string instance</returns>
+        String<T> ToLower() const
+        {
+            String<T> newString(*this);
+            T* buffer = const_cast<T*>(newString.Buffer());
+            for (uint32_t i = 0; i < length_; ++i)
+            {
+                T c = buffer[i];
+                if (c >= 'A' && c <= 'Z')
+                {
+                    buffer[i] = c + DistanceOfUpperLower;
+                }
+            }
+            return newString;
+        }
+
+        static constexpr auto DistanceOfUpperLower = 'a' - 'A';
+
+        String<T>& operator+=(const String<T>& value)
+        {
+            Append(value.Buffer(), value.Length());
+            return *this;
+        }
+
+        String<T>& operator+=(const T* buffer)
+        {
+            Append(buffer, CountChar(buffer));
+            return *this;
+        }
+        /// <summary>
+        /// Add some characters to the tail, which may expand current instance 
+        /// </summary>
+        /// <param name="buffer">c-style string, it will crash if this param is nullptr</param>
+        /// <param name="length">count of characters</param>
+        void Append(const T* buffer, uint32_t length)
+        {
+            if (length)
+            {
+                uint32_t newLength = length_ + length;
+                if (newLength < MaxStaticBufferSize)
+                {
+                    memcpy(storage_.static_buffer + length_, buffer, sizeof(T) * length);
+                }
+                else
+                {
+                    uint32_t newBufferSizeAtLeast = newLength + 1;
+                    if (length_ < MaxStaticBufferSize || storage_.buffer_size < newBufferSizeAtLeast)
+                    {
+                        storage_.variable_buffer = NewBufferWithBackup(newBufferSizeAtLeast);
+                        storage_.buffer_size = newBufferSizeAtLeast;
+                    }
+                    memcpy(storage_.variable_buffer + length_, buffer, sizeof(T) * length);
+                    storage_.variable_buffer[newLength] = 0;
+                }
+                length_ = newLength;
+            }
+        }
+
+        String<T>& operator+=(T value)
+        {
+            if (value)
+            {
+                uint32_t newLength = length_  + 1;
+                if (newLength < MaxStaticBufferSize)
+                {
+                    storage_.static_buffer[length_] = value;
+                }
+                else 
+                {
+                    uint32_t newBufferSizeAtLeast = newLength + 1;
+                    if (length_ < MaxStaticBufferSize || storage_.buffer_size < newBufferSizeAtLeast)
+                    {
+                        storage_.variable_buffer = NewBufferWithBackup(newBufferSizeAtLeast);
+                        storage_.buffer_size = newBufferSizeAtLeast;
+                    }
+                    storage_.variable_buffer[length_] = value;
+                    storage_.variable_buffer[newLength] = 0;
+                }
+                length_ = newLength;
+            }
+            return *this;
+        }
+
+        friend String<T> operator+(const String<T>& lhs, const String<T>& rhs)
+        {
+            return ConstructByConcat(lhs.Buffer(), lhs.length_, rhs.Buffer(), rhs.length_);
+        }
+
+        friend String<T> operator+(const String<T>& lhs, T rhs)
+        {
+            if (!rhs) return lhs;
+            String<T> new_string;
+            new_string.length_ = lhs.length_ + 1;
+            if (new_string.length_ < String<T>::MaxStaticBufferSize)
+            {
+                memcpy(new_string.storage_.static_buffer, lhs.storage_.static_buffer, lhs.length_);
+                new_string.storage_.static_buffer[lhs.length_] = rhs;
+            }
+            else
+            {
+                new_string.storage_.buffer_size = new_string.length_ + 1;
+                new_string.storage_.variable_buffer = new T[new_string.storage_.buffer_size];
+                memcpy(new_string.storage_.variable_buffer, lhs.Buffer(), lhs.length_);
+                new_string.storage_.variable_buffer[lhs.length_] = rhs;
+                new_string.storage_.variable_buffer[new_string.length_] = 0;
+            }
+            return new_string;
+        }
+
+        friend String<T> operator+(T lhs, const String<T>& rhs)
+        {
+            if (!lhs) return rhs;
+            String<T> new_string;
+            new_string.length_ = lhs.length_ + 1;
+            if (new_string.length_ < String<T>::MaxStaticBufferSize)
+            {
+                new_string.storage_.static_buffer[0] = lhs;
+                memcpy(new_string.storage_.static_buffer + 1, rhs.storage_.static_buffer, rhs.length_);
+            }
+            else
+            {
+                new_string.storage_.buffer_size = new_string.length_ + 1;
+                new_string.storage_.variable_buffer = new T[new_string.storage_.buffer_size];
+                new_string.storage_.variable_buffer[0] = lhs;
+                memcpy(new_string.storage_.variable_buffer + 1, rhs.Buffer(), rhs.length_);
+                new_string.storage_.variable_buffer[new_string.length_] = 0;
+            }
+            return new_string;
+        }
+
+        friend String<T> operator+(const String<T>& lhs, const T* rhs)
+        {
+            auto rhs_len = CountChar(rhs);
+            if (rhs_len == 0) return lhs;
+            return ConstructByConcat(lhs.Buffer(), lhs.length_, rhs, rhs_len);
+        }
+
+        friend String<T> operator+(const T* lhs, const String<T>& rhs)
+        {
+            auto lhs_len = CountChar(lhs);
+            if (lhs_len == 0) return rhs;
+            return ConstructByConcat(lhs, lhs_len, rhs.Buffer(), rhs.length_);
+        }
 
         bool operator==(const String<T>& _string) const noexcept
         {
-            return !Compare(*this, _string);
+            return Length() == _string.Length() && !Compare(*this, _string);
         }
 
         bool operator!=(const String<T>& _string) const noexcept
@@ -396,6 +602,34 @@ namespace Ytc
             dest_buffer[length] = 0;
             length_ = length;
         }
+
+        T* NewBufferWithBackup(uint32_t size) const
+        {
+            auto* newBuffer = new T[size];
+            memcpy(newBuffer, Buffer(), length_ * sizeof(T));
+            return newBuffer;
+        }
+
+        static String<T> ConstructByConcat(const T* s1, uint32_t len1, 
+                                           const T* s2, uint32_t len2)
+        {
+            String<T> new_string;
+            new_string.length_ = len1 + len2;
+            if (new_string.length_ < MaxStaticBufferSize)
+            {
+                memcpy(new_string.storage_.static_buffer, s1, sizeof(T) * len1);
+                memcpy(new_string.storage_.static_buffer + len1, s2, sizeof(T) * len2);
+            }
+            else
+            {
+                new_string.storage_.buffer_size = new_string.length_ + 1;
+                new_string.storage_.variable_buffer = new T[new_string.storage_.buffer_size];
+                memcpy(new_string.storage_.variable_buffer, s1, sizeof(T) * len1);
+                memcpy(new_string.storage_.variable_buffer + len1, s2, sizeof(T) * (len2 + 1));
+            }
+            return new_string;
+        }
+        
         static constexpr uint32_t MaxStaticBufferSize = 16;
         union Storage
         {
