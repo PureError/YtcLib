@@ -77,6 +77,28 @@ static void TestYtStringRemove()
     std::wcout << name.Remove(0, 1) << std::endl;
     std::wcout << name.Remove(4, 1) << std::endl;
 
+    WString tuo = L"tuo";
+    auto pos = name.IndexOf(tuo);
+    WString newString = name.Remove(pos, tuo.Length());
+    std::wcout << newString << std::endl;
+    assert(newString == L"yucheng");
+    
+    pos = name.LastIndexOf(L'u');
+    assert(pos == 3);
+}
+
+static void TestYtcStringCOW()
+{
+    std::cout << __FUNCTION__ << std::endl;
+    WString a('A', 256);
+    std::wcout << VAR(a) << std::endl;
+    WString b = a;
+    std::wcout << VAR(b) << std::endl;
+
+    b += L'C';
+    std::wcout << VAR(b) << VAR(a) << std::endl;
+    a = L'a';
+    std::wcout << VAR(a) << std::endl;
 }
 
 static void TestYtcString()
@@ -84,7 +106,7 @@ static void TestYtcString()
     std::cout << __FUNCTION__"\n";
     const wchar_t* samples1[] =
     {
-        nullptr,
+        //nullptr,
         L"",
         L"abc",
         L"abcdefghijklmn",
@@ -168,6 +190,7 @@ static void TestYtcString()
 
     TestYtcStringConcat();
     TestYtStringRemove();
+    TestYtcStringCOW();
 }
 
 int main()

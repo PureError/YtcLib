@@ -2,9 +2,10 @@
 
 #include <cstdint>
 #include <cstring>
+#include <atomic>
+
 #ifdef _DEBUG
 #include "YtcDbg.hpp"
-
 #define new DBG_NEW
 #endif
 namespace Ytc
@@ -31,7 +32,6 @@ namespace Ytc
         /// <returns></returns>
         static uint32_t CountChar(const T* buffer) noexcept
         {
-            if (!buffer) return 0;
             uint32_t result = 0;
             while (*buffer++) ++result;
             return result;
@@ -46,6 +46,7 @@ namespace Ytc
         {
             const T* buffer1 = s1.Buffer();
             const T* buffer2 = s2.Buffer();
+            if (buffer1 == buffer2) return 0;
             const uint32_t length = s1.length_ < s2.length_ ? s1.length_ : s2.length_;
             for (uint32_t i = 0; i < length; ++i)
             {
@@ -76,123 +77,138 @@ namespace Ytc
             return *s2 ? -1 : 0;
         }
 
-        String() noexcept = default;
-
-        String(T c)  noexcept
+        constexpr String() noexcept : length_(0), bufferSize_(StaticBufferSize)
         {
-            if (c)
+            storage_.staticBuffer[0] = 0;
+        }
+
+        constexpr String(T value) noexcept : bufferSize_(StaticBufferSize)
+        {
+            storage_.staticBuffer[0] = value;
+            length_  = value ? 1 : 0;
+        }
+
+        String(T value, uint32_t count)
+        {
+            if (value && count)
             {
-                storage_.static_buffer[0] = c;
-                length_ = 1;
+                auto* beginPtr = InitializeCapacity(count);
+                auto* endPtr = beginPtr + count;
+                while (beginPtr != endPtr) *beginPtr++ = value;
+                *beginPtr = 0;
+            }
+            else
+            {
+                length_ = 0;
+                bufferSize_ = StaticBufferSize;
+                storage_.staticBuffer[0] = 0;
             }
         }
 
         String(const T* buffer, uint32_t length)
         {
-            if (buffer)
-            {
-                InitializeFrom(buffer, length);
-            }
+            if (!buffer) throw Exception(L"Null pointer is not a string!");
+            CreateFrom(buffer, length);
         }
 
         String(const T* buffer) :String(buffer, CountChar(buffer))
         {
         }
 
-        String(const String<T>& _string)
+        String(const String<T>& other) 
         {
-            if (_string.Length() < MaxStaticBufferSize)
+            if (other.IsLong())
             {
-                memcpy(this, &_string, sizeof(_string));
+                GetSharedFrom(other);
             }
             else
             {
-                length_ = _string.Length();
-                storage_.buffer_size = length_ + 1;
-                storage_.variable_buffer = new T[storage_.buffer_size];
-                memcpy(storage_.variable_buffer, _string.storage_.variable_buffer, storage_.buffer_size * sizeof(T));
+                CreateFrom(other.Buffer(), other.Length());
             }
         }
+
         String(const String<T>& _string, uint32_t start, uint32_t count = MaxSize)
         {
             if (start < _string.Length())
             {
                 int length = _string.Length() - start;
                 if (length < count) count = length;
-                InitializeFrom(_string.Buffer() + start, length);
+                CreateFrom(_string.Buffer() + start, length);
+            }
+            else
+            {
+                throw Exception(L"Range error!");
             }
         }
+
         String(String<T>&& _string) noexcept
         {
-            memcpy(this, &_string, sizeof(_string));
-            _string.storage_.static_buffer[0] = 0;
-            _string.length_ = 0;
+            MoveImpl(std::move(_string));
         }
 
         ~String()
         {
-            if (Length() >= MaxStaticBufferSize)
-            {
-                delete[] storage_.variable_buffer;
-            }
+            Destroy();
         }
 
-        String& operator=(const String<T>& _string)
+        void Assign(const T* buffer, uint32_t length)
         {
-            if (this != &_string)
+            auto* ptr = UninitializedCopy(buffer, length, Reserve(length));
+            length_ = length;
+            *ptr = 0;  
+        }
+
+        String& operator=(const String<T>& other)
+        {
+            if (this != &other)
             {
-                if (_string.Length() < MaxStaticBufferSize)
+                if (other.IsLong())
                 {
-                    if (Length() >= MaxStaticBufferSize)
-                    {
-                        delete[] storage_.variable_buffer;
-                    }
-                    memcpy(this, &_string, sizeof(_string));
+                    Destroy();
+                    GetSharedFrom(other);
                 }
                 else
                 {
-                    length_ = _string.Length();
-                    if (storage_.buffer_size < length_)
-                    {
-                        delete[] storage_.variable_buffer;
-                        storage_.buffer_size = length_ + 1;
-                        storage_.variable_buffer = new T[storage_.buffer_size];
-                    }
-                    memcpy(storage_.variable_buffer, _string.storage_.variable_buffer, sizeof(T) * length_);
-                    storage_.variable_buffer[length_] = 0;
+                    Assign(other.Buffer(), other.Length());
                 }
             }
             return *this;
         }
+
         String& operator=(String<T>&& _string) noexcept
         {
             if (this != &_string)
             {
-                if (Length() >= MaxStaticBufferSize)
-                {
-                    delete[] storage_.variable_buffer;
-                }
-                memcpy(this, &_string, sizeof(_string));
-                _string.storage_.static_buffer[0] = 0;
-                _string.length_ = 0;
+                Destroy();
+                MoveImpl(std::move(_string));
             }
             return *this;
         }
 
         String& operator=(T c)
         {
-            if (Length() >= MaxStaticBufferSize)
+            auto* ptr = storage_.staticBuffer;
+            if (IsHeapAllocated())
             {
-                delete[] storage_.variable_buffer;
+                if (storage_.variableBuffer.Sharing())
+                {
+                    storage_.variableBuffer.DecRef();
+                    bufferSize_ = StaticBufferSize;;
+                }
+                else
+                {
+                    ptr = storage_.variableBuffer.ptr;
+                }
             }
-            storage_.static_buffer[0] = c;
+            *ptr = c;
+            *(++ptr) = 0;
             length_ = c ? 1 : 0;
             return *this;
         }
 
         const T* Buffer() const noexcept
         {
-            return Length() < MaxStaticBufferSize ? storage_.static_buffer : storage_.variable_buffer;
+            return IsHeapAllocated() ? storage_.variableBuffer.ptr : storage_.staticBuffer;
         }
         /// <summary>
         /// Return the count of characters.
@@ -329,29 +345,12 @@ namespace Ytc
             {
                 auto* myBuffer = Buffer();
                 uint32_t newLength = length_ - count;
-                if (start == 0)
-                {
-                    return String(myBuffer + count, newLength);
-                }
-                else
-                {
-                    String<T> newString;
-                    newString.length_ = newLength;
-                    uint32_t rightStart = start + count;
-                    if (newString.length_ < MaxStaticBufferSize)
-                    {
-                        memcpy(newString.storage_.static_buffer, myBuffer, sizeof(T) * (start - 0));
-                        memcpy(newString.storage_.static_buffer + start, myBuffer + rightStart, sizeof(T) * (length_ - rightStart));
-                    }
-                    else
-                    {
-                        newString.storage_.buffer_size = newString.length_ + 1;
-                        newString.storage_.variable_buffer = new T[newString.storage_.buffer_size];
-                        memcpy(newString.storage_.variable_buffer, myBuffer, sizeof(T) * (start - 0));
-                        memcpy(newString.storage_.variable_buffer + start, myBuffer + rightStart, sizeof(T) * (length_ + 1 - rightStart));
-                    }
-                    return newString;
-                }
+                String<T> newString;
+                auto* ptr = UninitializedCopy(myBuffer, start - 0, newString.InitializeCapacity(newLength));
+                uint32_t rightStart = start + count;
+                ptr = UninitializedCopy(myBuffer + rightStart, length_ - rightStart, ptr);
+                *ptr = 0;
+                return newString;
             }
             else
             {
@@ -365,7 +364,7 @@ namespace Ytc
         /// <returns>a new string instance</returns>
         String<T> ToUpper() const
         {
-            String<T> newString(*this);
+            String<T> newString(Buffer(), Length());
             T* buffer = const_cast<T*>(newString.Buffer());
             for (uint32_t i = 0; i < length_; ++i)
             {
@@ -383,7 +382,7 @@ namespace Ytc
         /// <returns>a new string instance</returns>
         String<T> ToLower() const
         {
-            String<T> newString(*this);
+            String<T> newString(Buffer(), Length());
             T* buffer = const_cast<T*>(newString.Buffer());
             for (uint32_t i = 0; i < length_; ++i)
             {
@@ -418,48 +417,31 @@ namespace Ytc
         {
             if (length)
             {
-                uint32_t newLength = length_ + length;
-                if (newLength < MaxStaticBufferSize)
+                T* tail = UninitializedCopy(buffer, length, Expand(length));
+                *tail = 0;
+            }
+        }
+        /// <summary>
+        /// Add some characters to the tail, which may expand current instance
+        /// </summary>
+        /// <param name="value">a specified character</param>
+        /// <param name="count">number of the character</param>
+        void Append(T value, uint32_t count = 1)
+        {
+            if (value && count)
+            {
+                T* tail = Expand(count);
+                for (; count-- != 0; ++tail)
                 {
-                    memcpy(storage_.static_buffer + length_, buffer, sizeof(T) * length);
+                    *tail = value;
                 }
-                else
-                {
-                    uint32_t newBufferSizeAtLeast = newLength + 1;
-                    if (length_ < MaxStaticBufferSize || storage_.buffer_size < newBufferSizeAtLeast)
-                    {
-                        storage_.variable_buffer = NewBufferWithBackup(newBufferSizeAtLeast);
-                        storage_.buffer_size = newBufferSizeAtLeast;
-                    }
-                    memcpy(storage_.variable_buffer + length_, buffer, sizeof(T) * length);
-                    storage_.variable_buffer[newLength] = 0;
-                }
-                length_ = newLength;
+                *tail = 0;
             }
         }
 
         String<T>& operator+=(T value)
         {
-            if (value)
-            {
-                uint32_t newLength = length_  + 1;
-                if (newLength < MaxStaticBufferSize)
-                {
-                    storage_.static_buffer[length_] = value;
-                }
-                else 
-                {
-                    uint32_t newBufferSizeAtLeast = newLength + 1;
-                    if (length_ < MaxStaticBufferSize || storage_.buffer_size < newBufferSizeAtLeast)
-                    {
-                        storage_.variable_buffer = NewBufferWithBackup(newBufferSizeAtLeast);
-                        storage_.buffer_size = newBufferSizeAtLeast;
-                    }
-                    storage_.variable_buffer[length_] = value;
-                    storage_.variable_buffer[newLength] = 0;
-                }
-                length_ = newLength;
-            }
+            Append(value);
             return *this;
         }
 
@@ -471,57 +453,36 @@ namespace Ytc
         friend String<T> operator+(const String<T>& lhs, T rhs)
         {
             if (!rhs) return lhs;
-            String<T> new_string;
-            new_string.length_ = lhs.length_ + 1;
-            if (new_string.length_ < String<T>::MaxStaticBufferSize)
-            {
-                memcpy(new_string.storage_.static_buffer, lhs.storage_.static_buffer, lhs.length_);
-                new_string.storage_.static_buffer[lhs.length_] = rhs;
-            }
-            else
-            {
-                new_string.storage_.buffer_size = new_string.length_ + 1;
-                new_string.storage_.variable_buffer = new T[new_string.storage_.buffer_size];
-                memcpy(new_string.storage_.variable_buffer, lhs.Buffer(), lhs.length_);
-                new_string.storage_.variable_buffer[lhs.length_] = rhs;
-                new_string.storage_.variable_buffer[new_string.length_] = 0;
-            }
-            return new_string;
+            String<T> newString;
+            auto* buffer = UninitializedCopy(lhs.Buffer(), lhs.Length(), newString.InitializeCapacity(lhs.Length() + 1));
+            *buffer = rhs;
+            *(++buffer) = 0;
+            return newString;
         }
 
         friend String<T> operator+(T lhs, const String<T>& rhs)
         {
             if (!lhs) return rhs;
-            String<T> new_string;
-            new_string.length_ = lhs.length_ + 1;
-            if (new_string.length_ < String<T>::MaxStaticBufferSize)
-            {
-                new_string.storage_.static_buffer[0] = lhs;
-                memcpy(new_string.storage_.static_buffer + 1, rhs.storage_.static_buffer, rhs.length_);
-            }
-            else
-            {
-                new_string.storage_.buffer_size = new_string.length_ + 1;
-                new_string.storage_.variable_buffer = new T[new_string.storage_.buffer_size];
-                new_string.storage_.variable_buffer[0] = lhs;
-                memcpy(new_string.storage_.variable_buffer + 1, rhs.Buffer(), rhs.length_);
-                new_string.storage_.variable_buffer[new_string.length_] = 0;
-            }
-            return new_string;
+            String<T> newString;
+            auto* buffer = newString.InitializeCapacity(lhs.Length() + 1);
+            *buffer = lhs;
+            UninitializedCopy(rhs.Buffer(), rhs.Length(), ++buffer);
+            *buffer = 0;
+            return newString;
         }
 
         friend String<T> operator+(const String<T>& lhs, const T* rhs)
         {
-            auto rhs_len = CountChar(rhs);
-            if (rhs_len == 0) return lhs;
-            return ConstructByConcat(lhs.Buffer(), lhs.length_, rhs, rhs_len);
+            auto rhsLen = CountChar(rhs);
+            if (rhsLen == 0) return lhs;
+            return ConstructByConcat(lhs.Buffer(), lhs.length_, rhs, rhsLen);
         }
 
         friend String<T> operator+(const T* lhs, const String<T>& rhs)
         {
-            auto lhs_len = CountChar(lhs);
-            if (lhs_len == 0) return rhs;
-            return ConstructByConcat(lhs, lhs_len, rhs.Buffer(), rhs.length_);
+            auto lhsLen = CountChar(lhs);
+            if (lhsLen == 0) return rhs;
+            return ConstructByConcat(lhs, lhsLen, rhs.Buffer(), rhs.length_);
         }
 
         bool operator==(const String<T>& _string) const noexcept
@@ -585,63 +546,252 @@ namespace Ytc
         }
 
     private:
-        void InitializeFrom(const T* buffer, uint32_t length)
+
+        struct VariableBuffer
         {
-            T* dest_buffer = nullptr;
-            if (length < MaxStaticBufferSize)
+            using RefCounter = std::atomic_uint32_t;
+            mutable RefCounter* refCount; // COW for long string
+            T* ptr;
+
+            bool IsRefCountBased() const noexcept
             {
-                dest_buffer = storage_.static_buffer;
+                return refCount != nullptr;
+            }
+
+            void IncRef() const
+            {
+                if (!IsRefCountBased())
+                {
+                    refCount = CreateRefCounter();
+                }
+
+                ++(*refCount);
+            }
+
+            void DecRef() const
+            {
+                --(*refCount);
+            }
+
+            void CheckRefCount()
+            {
+                if (*refCount == 0)
+                {
+                    DestroyRefCounter(refCount);
+                    delete[] ptr;
+                }
+            }
+
+            bool Sharing() const noexcept
+            {
+                return IsRefCountBased() && RefCount() > 1;
+            }
+
+            uint32_t RefCount() const
+            {
+                return *refCount;
+            }
+        private:
+            static auto* CreateRefCounter()
+            {
+                return new RefCounter(1);
+            }
+
+            static void DestroyRefCounter(RefCounter* counter)
+            {
+                delete counter;
+            }
+        };
+        
+        static constexpr uint32_t StaticBufferSize = 16;
+        static constexpr uint32_t MinLongStringLength = 256;
+
+        static T* UninitializedCopy(const T* source, uint32_t count, T* dest)
+        {
+            memcpy(dest, source, count * sizeof(T));
+            return dest + count;
+        }
+
+        bool IsHeapAllocated() const noexcept
+        {
+            return bufferSize_ > StaticBufferSize;
+        }
+
+        bool IsLong() const noexcept
+        {
+            return Length() >= MinLongStringLength;
+        }
+
+        T* InitializeCapacity(uint32_t length)
+        {
+            length_ = length;
+            if (length < StaticBufferSize)
+            {
+                bufferSize_ = StaticBufferSize;
+                return storage_.staticBuffer;
+            }
+            bufferSize_ = length + 1;
+            auto* ptr = new T[bufferSize_];
+            storage_.variableBuffer.ptr = ptr;
+            storage_.variableBuffer.refCount = nullptr;
+            length_ = length;
+            return ptr;
+        }
+
+        T* Reserve(uint32_t n)
+        {
+            uint32_t bufferSizeRequired = n + 1;
+            if (IsHeapAllocated())
+            {
+                if (storage_.variableBuffer.Sharing())
+                {
+                    storage_.variableBuffer.DecRef();
+                    if (n < StaticBufferSize)
+                    {
+                        bufferSize_ = StaticBufferSize;
+                        return storage_.staticBuffer;
+                    }
+                    storage_.variableBuffer.ptr = new T[bufferSizeRequired];
+                    storage_.variableBuffer.refCount = nullptr;
+                    bufferSize_ = bufferSizeRequired;
+                    return storage_.variableBuffer.ptr;
+                }
+                else
+                {
+                    if (bufferSize_ < bufferSizeRequired) 
+                    {
+                        delete[] storage_.variableBuffer.ptr;
+                        storage_.variableBuffer.ptr = new T[bufferSizeRequired];
+                        bufferSize_ = bufferSizeRequired;
+                    }
+                    return storage_.variableBuffer.ptr;
+                }
+            }
+            
+            if (n < StaticBufferSize)
+            {
+                return storage_.staticBuffer;
+            }
+            storage_.variableBuffer.ptr = new T[bufferSizeRequired];
+            storage_.variableBuffer.refCount = nullptr;
+            bufferSize_ = bufferSizeRequired;
+            return storage_.variableBuffer.ptr;
+        }
+
+        T* Expand(uint32_t extraLength)
+        {
+            uint32_t newLength = length_ + extraLength;
+            uint32_t minBufferSize = newLength + 1;
+            T* buffer = nullptr;
+            if (IsHeapAllocated())
+            {
+                if (storage_.variableBuffer.Sharing())
+                {
+                    assert(newLength >= StaticBufferSize);
+                    buffer = new T[minBufferSize];
+                    T* tail = UninitializedCopy(storage_.variableBuffer.ptr, length_, buffer);
+                    storage_.variableBuffer.DecRef();
+                    storage_.variableBuffer.ptr = buffer;
+                    storage_.variableBuffer.refCount = nullptr;
+                    bufferSize_ = minBufferSize;
+                    buffer = tail;
+                }
+                else
+                {
+                    if (bufferSize_ < minBufferSize)
+                    {
+                        buffer = new T[minBufferSize];
+                        T* tail = UninitializedCopy(storage_.variableBuffer.ptr, length_, buffer);
+                        delete[] storage_.variableBuffer.ptr;
+                        storage_.variableBuffer.ptr = buffer;
+                        bufferSize_ = minBufferSize;
+                        buffer = tail;
+                    }
+                    else
+                    {
+                        buffer = storage_.variableBuffer.ptr + length_;
+                    }
+                }
+            }
+            else if (StaticBufferSize < minBufferSize)
+            {
+                buffer = new T[minBufferSize];
+                T* tail = UninitializedCopy(storage_.staticBuffer, length_, buffer);
+                storage_.variableBuffer.ptr = buffer;
+                storage_.variableBuffer.refCount = nullptr;
+                bufferSize_ = minBufferSize;
+                buffer = tail;
             }
             else
             {
-                storage_.buffer_size = length + 1;
-                storage_.variable_buffer = new T[storage_.buffer_size];
-                dest_buffer = storage_.variable_buffer;
+                buffer = storage_.staticBuffer + length_;
             }
-            memcpy(dest_buffer, buffer, sizeof(T) * length);
-            dest_buffer[length] = 0;
-            length_ = length;
+            length_ = newLength;
+            return buffer;
         }
 
-        T* NewBufferWithBackup(uint32_t size) const
+        void ShallowCopyFrom(const String<T>& other)
         {
-            auto* newBuffer = new T[size];
-            memcpy(newBuffer, Buffer(), length_ * sizeof(T));
-            return newBuffer;
+            memcpy(this, &other, sizeof(other));
+        }
+
+        void MoveImpl(String<T>&& other)
+        {
+            ShallowCopyFrom(other);
+            other.storage_.staticBuffer[0] = 0;
+            other.length_ = 0;
+            other.bufferSize_ = StaticBufferSize;
+        }
+
+        void GetSharedFrom(const String<T>& other)
+        {
+            other.storage_.variableBuffer.IncRef();
+            ShallowCopyFrom(other);
+        }
+
+        void CreateFrom(const T* buffer, uint32_t length)
+        {
+            auto* ptr = UninitializedCopy(buffer, length, InitializeCapacity(length));
+            *ptr = 0;
+        }
+
+        void Destroy()
+        {
+            if (IsHeapAllocated())
+            {
+                if (storage_.variableBuffer.IsRefCountBased())
+                {
+                    storage_.variableBuffer.DecRef();
+                    storage_.variableBuffer.CheckRefCount();
+                }
+                else
+                {
+                    delete[] storage_.variableBuffer.ptr;
+                }
+                bufferSize_ = StaticBufferSize;
+            }
+            length_ = 0;
         }
 
         static String<T> ConstructByConcat(const T* s1, uint32_t len1, 
                                            const T* s2, uint32_t len2)
         {
-            String<T> new_string;
-            new_string.length_ = len1 + len2;
-            if (new_string.length_ < MaxStaticBufferSize)
-            {
-                memcpy(new_string.storage_.static_buffer, s1, sizeof(T) * len1);
-                memcpy(new_string.storage_.static_buffer + len1, s2, sizeof(T) * len2);
-            }
-            else
-            {
-                new_string.storage_.buffer_size = new_string.length_ + 1;
-                new_string.storage_.variable_buffer = new T[new_string.storage_.buffer_size];
-                memcpy(new_string.storage_.variable_buffer, s1, sizeof(T) * len1);
-                memcpy(new_string.storage_.variable_buffer + len1, s2, sizeof(T) * (len2 + 1));
-            }
-            return new_string;
+            String<T> newString;
+            T* buffer = newString.InitializeCapacity(len1 + len2);
+            buffer = UninitializedCopy(s1, len1, buffer);
+            buffer = UninitializedCopy(s2, len2, buffer);
+            *buffer = 0;
+            return newString;
         }
-        
-        static constexpr uint32_t MaxStaticBufferSize = 16;
+
         union Storage
         {
-            struct
-            {
-                uint32_t buffer_size;
-                T* variable_buffer;
-            };
-            T static_buffer[MaxStaticBufferSize];
+            VariableBuffer variableBuffer;
+            T staticBuffer[StaticBufferSize];
         };
-        Storage storage_ = {};
-        uint32_t length_ = 0;
+        Storage storage_;
+        uint32_t length_;
+        uint32_t bufferSize_;
     };
 
     template<typename T>
