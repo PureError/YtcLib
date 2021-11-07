@@ -722,7 +722,7 @@ namespace Ytc
                 bufferSize_ = minBufferSize;
                 buffer = tail;
             }
-            else
+            else 
             {
                 buffer = storage_.staticBuffer + length_;
             }
