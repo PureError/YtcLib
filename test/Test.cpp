@@ -3,9 +3,8 @@
 #include <vector>
 #include <algorithm>
 #include "YtcString.hpp"
-
+#include "YtcCollection.hpp"
 #define VAR(v) ","#v"="<<(v)
-
 
 
 using namespace Ytc;
@@ -193,11 +192,61 @@ static void TestYtcString()
     TestYtcStringCOW();
 }
 
+
+
+static void TestList()
+{
+    List<int> l1;
+    for (int i = 10; i > 0; --i)
+    {
+        l1.Add(i);
+    }
+    
+    auto enumerater = l1.GetEnumerator();
+    while (enumerater->MoveNext())
+    {
+        std::cout << enumerater->Current();
+    }
+
+    List<WString> list_string1;
+    list_string1.Add(L"yutuocheng");
+    {
+        auto enumerater = list_string1.GetEnumerator();
+        while (enumerater->MoveNext())
+        {
+            std::wcout << enumerater->Current();
+        }
+        std::cout << std::endl;
+    }
+    List<WString> list_string2 = list_string1;
+    {
+        auto enumerater = list_string2.GetEnumerator();
+        while (enumerater->MoveNext())
+        {
+            std::wcout << enumerater->Current();
+        }
+        std::cout << std::endl;
+    }
+    list_string1.Add(L"ackerly");
+    {
+        auto enumerater = list_string1.GetEnumerator();
+        while (enumerater->MoveNext())
+        {
+            std::wcout << enumerater->Current();
+        }
+        std::cout << std::endl;
+    }
+
+}
+
 int main()
 {
     {
-        MemLeakChecker checker;
-        TestYtcString();
+#ifdef _MSC_VER
+        //MemLeakChecker checker;
+#endif
+        //TestYtcString();
+        TestList();
     }
     std::cin.get();
     return 0;

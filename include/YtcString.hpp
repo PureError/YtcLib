@@ -1,23 +1,18 @@
 #pragma once
 
+#include "YtcError.hpp"
+
 #include <cstdint>
 #include <cstring>
 #include <atomic>
 
-#ifdef _DEBUG
-#include "YtcDbg.hpp"
-#define new DBG_NEW
-#endif
+//#ifdef _DEBUG
+//#include "YtcDbg.hpp"
+//#define new DBG_NEW
+//#endif
 namespace Ytc
 {
-    class Exception
-    {
-    public:
-        Exception(const wchar_t* desc) : description_(desc) {}
-        const wchar_t* What() const { return description_; }
-    private:
-        const wchar_t* description_;
-    };
+
 
     template<typename T>
     class String

@@ -20,6 +20,7 @@ void* __cdecl operator new(size_t size, int type, const char* filename, int line
 #endif
 }
 
+
 void __cdecl operator delete(void* p)
 {
 #ifdef _DEBUG
