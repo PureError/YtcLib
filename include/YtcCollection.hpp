@@ -98,7 +98,7 @@ namespace Ytc
             {
                 const auto bytesCount = other.count_ * sizeof(T);
                 buffer_ = static_cast<T*>(malloc(bytesCount));
-                memcpy(buffer_, other.buffer_, bytesCount);
+                std::uninitialized_copy(other.buffer_, other.buffer_ + other.count_, buffer_);
                 capacity_ = count_ = other.count_;
             }
             else
