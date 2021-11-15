@@ -237,6 +237,35 @@ static void TestList()
         std::cout << std::endl;
     }
 
+    list_string1.Insert(1, L"tuocheng");
+    {
+        auto enumerater = list_string1.GetEnumerator();
+        while (enumerater->MoveNext())
+        {
+            std::wcout << enumerater->Current();
+        }
+        std::cout << std::endl;
+    }
+
+    list_string1.Insert(list_string1.Count() - 1, L"iloveyou\t");
+    {
+        auto enumerater = list_string1.GetEnumerator();
+        while (enumerater->MoveNext())
+        {
+            std::wcout << enumerater->Current();
+        }
+        std::cout << std::endl;
+    }
+    list_string1.RemoveAt(1);
+
+    {
+        auto enumerater = list_string1.GetEnumerator();
+        while (enumerater->MoveNext())
+        {
+            std::wcout << enumerater->Current();
+        }
+        std::cout << std::endl;
+    }
 }
 
 int main()

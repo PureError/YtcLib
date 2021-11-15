@@ -20,7 +20,10 @@ namespace Ytc
         virtual ~Disposable() {}
     };
 
-
+    /// <summary>
+    /// Supports a simple iteration over a generic collection.
+    /// </summary>
+    /// <typeparam name="T">The type of element placed in the collection</typeparam>
     template<typename T>
     class IEnumerator : public Disposable
     {
@@ -30,6 +33,10 @@ namespace Ytc
         virtual void Reset() = 0;
     };
 
+    /// <summary>
+    /// Exposes the enumerator, which supports a simple iteration over a collection of a specified type.
+    /// </summary>
+    /// <typeparam name="T">The type of element placed in the collection</typeparam>
     template<typename T>
     class IEnumerable : public Disposable
     {
@@ -75,14 +82,17 @@ namespace Ytc
             {
                 return ++index_ < static_cast<int>(list_.Count());
             }
+
             T& Current() override
             {
                 return list_[index_];
             }
+
             void Reset() override
             {
                 index_ = InvalidIndex;
             }
+
         private:
             List<T>& list_;
             int index_;
@@ -166,7 +176,10 @@ namespace Ytc
             }
             return *this;
         }
-
+        /// <summary>
+        /// Add an element to the end of the list.
+        /// </summary>
+        /// <param name="item">new element</param>
         void Add(const T& item)
         {
             uint32_t newCount = count_ + 1;
@@ -177,14 +190,64 @@ namespace Ytc
             new (buffer_ + count_) T(item);
             count_ = newCount;
         }
-
+        /// <summary>
+        /// Insert an element into the list at the specified position which is zero-based.
+        /// </summary>
+        /// <param name="index">index/position</param>
+        /// <param name="item">new item</param>
+        void Insert(int index, const T& item)
+        {
+            uint32_t pos = index;
+            if (pos > count_)
+            {
+                throw Exception(L"Argument <index> is out of range!");
+            }
+            else if (pos == count_)
+            {
+                Add(item);
+            }
+            else
+            {
+                uint32_t newCount = count_ + 1;
+                if (capacity_ < newCount)
+                {
+                    Reserve(newCount + newCount >> 1);
+                }
+                new (buffer_ + count_) T(Move(buffer_[count_ - 1]));
+                for (uint32_t i = count_ - 1; i > pos ; --i)
+                {
+                    buffer_[i] = Move(buffer_[i - 1]);
+                }
+                new (buffer_ + pos) T(item);
+                count_ = newCount;
+            }
+        }
+        /// <summary>
+        /// Inserts the elements of a collection into the list at the specified index.
+        /// </summary>
+        /// <param name="index">the specified index</param>
+        /// <param name="collection"></param>
+        void InsertRange(int index, Ref<IEnumerable<T>> collection)
+        {
+            while (collection->MoveNext())
+            {
+                Insert(index++, collection->Current());
+            }
+        }
+        /// <summary>
+        /// Swap the internal data with the specified list.
+        /// </summary>
+        /// <param name="other"></param>
         void SwapWith(List<T>& other)
         {
             std::swap(buffer_, other.buffer_);
             std::swap(capacity_, other.capacity_);
             std::swap(count_, other.count_);
         }
-
+        /// <summary>
+        /// Adds batch elements to the end of the list.
+        /// </summary>
+        /// <param name="collection"></param>
         void AddRange(Ref<IEnumerable<T>> collection)
         {
             while (collection->MoveNext())
@@ -192,13 +255,41 @@ namespace Ytc
                 Add(collection->Current());
             }
         }
+        /// <summary>
+        /// Remove the element at the specified index of the list.
+        /// </summary>
+        /// <param name="index">zero-based index</param>
+        void RemoveAt(int index)
+        {
+            uint32_t pos = index;
+            if (pos < count_)
+            {
+                uint32_t newCount = count_ - 1;
+                for (; pos < newCount; ++pos)
+                {
+                    buffer_[pos] = Move(buffer_[pos + 1]);
+                }
+                count_ = newCount;
+            }
+            else
+            {
+                throw Exception(L"Argument <index> is out of range!");
+            }
+        }
 
+        /// <summary>
+        /// Removes all elements
+        /// </summary>
         void Clear()
         {
             Discard(0, count_);
             count_ = 0;
         }
-
+        /// <summary>
+        /// Get the specified element's index.
+        /// </summary>
+        /// <param name="item">the element</param>
+        /// <returns>zero-based index; return -1 if not exists</returns>
         int IndexOf(const T& item) const
         {
             for (int i = 0; i < count_; ++i)
@@ -210,7 +301,11 @@ namespace Ytc
             }
             return InvalidIndex;
         }
-
+        /// <summary>
+        /// Determines whether an element is in the list.
+        /// </summary>
+        /// <param name="item"></param>
+        /// <returns></returns>
         bool Contains(const T& item) const
         {
             return IndexOf(item) != InvalidIndex;
