@@ -192,7 +192,18 @@ static void TestYtcString()
     TestYtcStringCOW();
 }
 
+template<typename T>
+static void Dump(IEnumerable<T>& collection)
+{
+    auto e = collection.GetEnumerator();
+    while (e->MoveNext())
+    {
+        std::wcout << e->Current();
+        std::wcout << L',';
+    }
 
+    std::wcout << std::endl;
+}
 
 static void TestList()
 {
@@ -201,70 +212,44 @@ static void TestList()
     {
         l1.Add(i);
     }
-    
-    auto enumerater = l1.GetEnumerator();
-    while (enumerater->MoveNext())
-    {
-        std::cout << enumerater->Current();
-    }
 
-    List<WString> list_string1;
-    list_string1.Add(L"yutuocheng");
-    {
-        auto enumerater = list_string1.GetEnumerator();
-        while (enumerater->MoveNext())
-        {
-            std::wcout << enumerater->Current();
-        }
-        std::cout << std::endl;
-    }
-    List<WString> list_string2 = list_string1;
-    {
-        auto enumerater = list_string2.GetEnumerator();
-        while (enumerater->MoveNext())
-        {
-            std::wcout << enumerater->Current();
-        }
-        std::cout << std::endl;
-    }
-    list_string1.Add(L"ackerly");
-    {
-        auto enumerater = list_string1.GetEnumerator();
-        while (enumerater->MoveNext())
-        {
-            std::wcout << enumerater->Current();
-        }
-        std::cout << std::endl;
-    }
-
-    list_string1.Insert(1, L"tuocheng");
-    {
-        auto enumerater = list_string1.GetEnumerator();
-        while (enumerater->MoveNext())
-        {
-            std::wcout << enumerater->Current();
-        }
-        std::cout << std::endl;
-    }
-
-    list_string1.Insert(list_string1.Count() - 1, L"iloveyou\t");
-    {
-        auto enumerater = list_string1.GetEnumerator();
-        while (enumerater->MoveNext())
-        {
-            std::wcout << enumerater->Current();
-        }
-        std::cout << std::endl;
-    }
-    list_string1.RemoveAt(1);
+    Dump(l1);
 
     {
-        auto enumerater = list_string1.GetEnumerator();
-        while (enumerater->MoveNext())
+        List<WString> list_str1;
+        WString strings1[] = 
         {
-            std::wcout << enumerater->Current();
+            L"YU",
+            L"TUO",
+            L"CHENG",
+            L"NIU",
+            L"BI",
+        };
+        for (auto& s : strings1)
+        {
+            list_str1.Add(s);
         }
-        std::cout << std::endl;
+
+        auto list_str2 = list_str1;
+        Dump(list_str1);
+        Dump(list_str2);
+        WString strings2[]=
+        {
+            L"SHI",
+            L"ZHEN",
+            L"DE",
+            L"HAO",
+        };
+
+        for (int i = 0; i < std::size(strings2); ++i)
+        {
+            list_str1.Insert(i + 3, strings2[i]);
+        }
+
+        Dump(list_str1);
+        list_str2 = list_str1;
+        list_str2.RemoveAt(3);
+        Dump(list_str2);
     }
 }
 

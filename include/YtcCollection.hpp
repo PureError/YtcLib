@@ -182,13 +182,7 @@ namespace Ytc
         /// <param name="item">new element</param>
         void Add(const T& item)
         {
-            uint32_t newCount = count_ + 1;
-            if (capacity_ < newCount)
-            {
-                Reserve(newCount + (newCount >> 1));
-            }
-            new (buffer_ + count_) T(item);
-            count_ = newCount;
+            Insert(count_, item);
         }
         /// <summary>
         /// Insert an element into the list at the specified position which is zero-based.
@@ -202,24 +196,11 @@ namespace Ytc
             {
                 throw Exception(L"Argument <index> is out of range!");
             }
-            else if (pos == count_)
-            {
-                Add(item);
-            }
             else
             {
-                uint32_t newCount = count_ + 1;
-                if (capacity_ < newCount)
-                {
-                    Reserve(newCount + newCount >> 1);
-                }
-                new (buffer_ + count_) T(Move(buffer_[count_ - 1]));
-                for (uint32_t i = count_ - 1; i > pos ; --i)
-                {
-                    buffer_[i] = Move(buffer_[i - 1]);
-                }
-                new (buffer_ + pos) T(item);
-                count_ = newCount;
+                T* ptr = Reserve(pos, 1);
+                new (ptr) T(item);
+                count_++;
             }
         }
         /// <summary>
@@ -227,11 +208,16 @@ namespace Ytc
         /// </summary>
         /// <param name="index">the specified index</param>
         /// <param name="collection"></param>
-        void InsertRange(int index, Ref<IEnumerable<T>> collection)
+        void InsertRange(int index, IEnumerable<T>& collection)
         {
-            while (collection->MoveNext())
+            auto enumerator = collection.GetEnumerator();
+            uint32_t count = 0;
+            while (enumerator->MoveNext()) ++count;
+            uint32_t pos = index;
+            T* ptr = Reserve(pos, count);
+            for (enumerator->Reset(); enumerator->MoveNext();)
             {
-                Insert(index++, collection->Current());
+                new (ptr++) T(enumerator->Current());
             }
         }
         /// <summary>
@@ -331,10 +317,60 @@ namespace Ytc
             return buffer_[index];
         }
     private:
-        void Reserve(uint32_t size)
+        void Realloc(uint32_t size)
         {
             ReallocImpl(size, std::is_trivially_copy_constructible<T>());
             capacity_ = size;
+        }
+
+        T* Reserve(uint32_t pos, uint32_t count)
+        {
+            uint32_t newCount = count_ + count;
+            if (newCount > capacity_)
+            {
+                newCount += newCount >> 1;
+                if (pos < count_)
+                {
+                    T* newBuffer = static_cast<T*>(malloc(sizeof(T) * newCount));
+                    std::uninitialized_copy(buffer_, buffer_ + pos, newBuffer);
+                    std::uninitialized_copy(buffer_ + pos, buffer_ + count_, newBuffer + pos + count);
+                    Discard(0, count_);
+                    free(buffer_);
+                    buffer_ = newBuffer;
+                }
+                else
+                {
+                    Realloc(newCount);
+                }
+                capacity_ = newCount;
+            }
+            else
+            {
+                uint32_t newStartOfTheSecondPart = pos + count;
+                int diff = count_ - newStartOfTheSecondPart;
+                if (diff <= 0) 
+                {
+                    std::uninitialized_copy(buffer_ + pos, buffer_ + count_, buffer_ + newStartOfTheSecondPart);
+                    return buffer_ + pos;
+                }
+                else
+                {
+                    uint32_t src = count_ - 1;
+                    for (uint32_t dest = src + count; dest > count_ - 1; --src, dest = src + count)
+                    {
+                        new (&buffer_[dest]) T(buffer_[src]);
+                    }
+                    for (; src >= pos; --src)
+                    {
+                        buffer_[src + count] = Move(buffer_[src]);
+                    }
+                }
+                for (uint32_t i = 0; i < count; ++i)
+                {
+                    buffer_[pos + i].~T();
+                }
+            }
+            return buffer_ + pos;
         }
 
         void ReallocImpl(size_t size, std::true_type)
@@ -346,6 +382,8 @@ namespace Ytc
         {
             T* newBuffer = static_cast<T*>(malloc(sizeof(T) * size));
             std::uninitialized_copy(buffer_, buffer_ + count_, newBuffer);
+            Discard(0, count_);
+            free(buffer_);
             buffer_ = newBuffer;
         }
         
